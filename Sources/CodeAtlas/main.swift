@@ -14,7 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
     let rootPicker=NSPopUpButton()
     let search=NSSearchField()
     let table=NSTableView()
-    let titleLabel=NSTextField(labelWithString:"Whitespace Master")
+    let titleLabel=NSTextField(labelWithString:"Choose a folder")
     let metrics=NSTextField(labelWithString:"Choose a project to begin")
     let status=NSTextField(labelWithString:"Local source • read only")
     let zoomLabel=NSTextField(labelWithString:"100%")
@@ -79,10 +79,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         }
         makeStatusItem()
         if let icon=NSImage(named:"AppIcon") {NSApp.applicationIconImage=icon}
-        let docs=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Documents")
-        roots=["whitespace_master","whitespace-personal","whitespace-context-kernel"].map { docs.appendingPathComponent($0) }.filter { FileManager.default.fileExists(atPath:$0.path) }
-        let operatorCheckout=docs.appendingPathComponent("whitespace_master/tmp/drop-chat-voice-20260908")
-        if FileManager.default.fileExists(atPath:operatorCheckout.path) { roots.append(operatorCheckout) }
+        // Restore only folders explicitly opened by the user.
+        roots=[]
         let removed=Set(self.preferences.stringArray(forKey:"removedProjectRoots") ?? [])
         roots.removeAll {removed.contains($0.path)}
         for path in self.preferences.stringArray(forKey:"projectRoots") ?? [] {

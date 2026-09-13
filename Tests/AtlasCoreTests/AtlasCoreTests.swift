@@ -39,7 +39,8 @@ final class AtlasCoreTests: XCTestCase {
         XCTAssertEqual(try RepoIndexer.scan(root,includeMedia:true).files.map(\.path),["photo.png"])
     }
     func testProjectIdentityAndUnsupportedFolders() {
-        XCTAssertEqual(ProjectIdentity.title(URL(fileURLWithPath:"/repo/drop-chat-voice-20260908")),"Whitespace Operator · build checkout")
+        XCTAssertEqual(ProjectIdentity.title(URL(fileURLWithPath:"/repo/Fieldnotes")),"Fieldnotes")
+        XCTAssertEqual(ProjectIdentity.title(URL(fileURLWithPath:"/repo/sample_build-2026")),"sample_build-2026")
         XCTAssertNotNil(ProjectIdentity.rejection(URL(fileURLWithPath:"/Applications")))
         XCTAssertNil(ProjectIdentity.rejection(URL(fileURLWithPath:"/Users/example/Screenshots")))
         XCTAssertNotNil(ProjectIdentity.rejection(URL(fileURLWithPath:"/Users/example/Example.app")))
@@ -115,11 +116,14 @@ final class AtlasCoreTests: XCTestCase {
         XCTAssertTrue(a.tiles.allSatisfy { $0.rect.w>0 && $0.rect.h>0 })
     }
     func testSourcePolicyBlocksDataAndSensitivePaths() {
-        for path in [".env",".env.py",".whitespace/graph/a.py","graph/data.py","state/private.swift","secrets.py","credential_store.py","node_modules/a.js","tmp/a.py","foo/../a.swift","/absolute.swift","record.json","notes.md","dork/main.swift","App.app/a.swift"] {
+        for path in [".env",".env.py",".private-store/graph/a.py","graph/data.py","state/private.swift","secrets.py","credential_store.py","node_modules/a.js","tmp/a.py","foo/../a.swift","/absolute.swift","record.json","notes.md","dork/main.swift","App.app/a.swift"] {
             XCTAssertFalse(SourcePolicy.allowed(path),path)
         }
         XCTAssertTrue(SourcePolicy.allowed("src/kernel/engine.py"))
-        XCTAssertFalse(SourcePolicy.validateRoot(URL(fileURLWithPath:"/Users/example/.whitespace/graph")))
+        XCTAssertFalse(SourcePolicy.validateRoot(URL(fileURLWithPath:"/Users/example/.private-store/graph")))
+        for path in ["/repo/.private-store/project", "/repo/Example Backups/project", "/repo/Example Legacy/project"] {
+            XCTAssertFalse(SourcePolicy.validateRoot(URL(fileURLWithPath:path)),path)
+        }
         XCTAssertTrue(SourcePolicy.validateRoot(URL(fileURLWithPath:"/Users/example/project/tmp/chosen-worktree")))
         XCTAssertFalse(SourcePolicy.validateRoot(URL(fileURLWithPath:"/Users/example/App.app/Contents/Resources")))
     }

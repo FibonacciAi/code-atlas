@@ -6,7 +6,7 @@
 
 The gallery and silent video show the actual app using only invented code, documents, and artwork. No personal files, desktop content, or microphone audio are included. [Media provenance](docs/public-media.md).
 
-Native macOS file explorer built with Swift, AppKit, and Metal. Zoom from a folder map into readable code, documents, pictures, and playable media. Requires macOS 14 or later and a Swift toolchain. Run `./script/build_and_run.sh` to build and open the app. Normal startup restores your last real folder. Sample mode is available only through the explicit `--demo` developer launch.
+Native macOS file explorer built with Swift, AppKit, and Metal. Zoom from a folder map into readable code, documents, pictures, and playable media. Requires macOS 14 or later and Swift 5.10+. Run `./script/build_and_run.sh` to build and open the app. Normal startup restores your last real folder. Sample mode is available only through the explicit `--demo` developer launch.
 
 ## Explore
 
@@ -19,17 +19,15 @@ Native macOS file explorer built with Swift, AppKit, and Metal. Zoom from a fold
 - Selecting a file opens the inspector: styled source, lexical outline, local import candidates, and bounded textual occurrence search. These are not semantic definitions or references.
 - Nearby visible tiles request bounded source previews automatically. Text is drawn through AppKit over instanced Metal geometry. Image, video, and PDF thumbnails are instanced in the same Metal render pass as their tiles, with pinned visible slots to prevent reload flashing.
 
-## Personal
+## Optional local integration
 
-Open Personal View requests a bounded live projection from the local Personal kernel. The client discovers kernel.v3/context-pack.v1 first and uses only kernel-issued scopes. No graph files are read directly; no graph writes or remote embeddings occur. Claims, links, freshness, and source references remain in the private native window. Clear & Lock or closing the window cancels requests and clears retained context. Connection options contains an optional memory-only scoped token.
-
-No sample controls appear in a normal launch. Developer sample mode is explicitly labeled and contains invented data. Never capture a live Personal window for QA; use isolated samples only.
+An optional local service can supply a read-only view of connected information. The file explorer works independently. Closing that view clears its retained content.
 
 ## Performance and limits
 
 The packaged app uses an optimized release build. Camera transitions use monotonic timing and common run-loop modes, with reduced-motion support. Unchanged filter and selection assignments avoid unnecessary instance uploads. Labels and preview reads are bounded; rendering is demand-driven. These changes are not a measured frame-rate guarantee.
 
-The source index is memory-only and never writes to selected repositories. Git listing honors ignore rules with timeout/cancellation and a 32 MiB output bound. Non-Git roots use a filtered walk. Source extensions are allowlisted; hidden entries, private graph/state, secrets/credential filenames, Dork, symlinks, binary files, dependencies, and generated output are excluded. File size limit: 4 MiB; count limit: 50,000. Filtering is not a general secret detector for arbitrary source contents.
+The source index is memory-only and never writes to selected repositories. Git listing honors ignore rules with timeout/cancellation and a 32 MiB output bound. Non-Git roots use a filtered walk. Source extensions are allowlisted; hidden entries, private graph/state, secrets/credential filenames, excluded project folders, symlinks, binary files, dependencies, and generated output are excluded. File size limit: 4 MiB; count limit: 50,000. Filtering is not a general secret detector for arbitrary source contents.
 
 Source preview cache holds up to 32 bounded snippets, with four requests in flight. Inspector source is capped at 128 KiB. Textual occurrence search is capped at 5,000 indexed files. Semantic analysis, incremental watching, a GPU glyph atlas, and synchronized relationship diagrams remain future work. Sustained 120 Hz and 2.5-million-line performance have not been measured.
 
@@ -39,16 +37,15 @@ Source preview cache holds up to 32 bounded snippets, with four requests in flig
 swift test
 ./script/build_and_run.sh --build-only
 .build/release/CodeAtlas --audit /path/to/source
-.build/release/CodeAtlas --check-personal
 ```
 
-The last command performs a bounded live Personal read and reports only aggregate adapter counts. Twenty-eight tests cover layout, indexing, cancellation, private-path and symlink exclusions, Git status, lexical relationships, project validation, Personal projection validation, thumbnail residency, and scroll direction/transition boundaries. Native UI verification and live-client verification are separate from these tests.
+The test suite covers layout, indexing, cancellation, private-path and symlink exclusions, Git status, lexical relationships, project validation, local projection validation, thumbnail residency, and scroll direction/transition boundaries. Native UI verification and live-client verification are separate from these tests.
 
-The isolated verification bundle (`local.codeatlas.verification`) runs only generated local files. `--verify-preview-ui` exercises the real map and preview classes; `--verify-project-ui` exercises the normal folder-switch UI with two generated roots and separate preferences. Neither loads saved repositories or Personal. Normal launches never enter verification mode.
+The isolated verification bundle (`local.codeatlas.verification`) runs only generated local files. `--verify-preview-ui` exercises the real map and preview classes; `--verify-project-ui` exercises the normal folder-switch UI with two generated roots and separate preferences. Neither loads saved repositories or connected information. Normal launches never enter verification mode.
 
 Three recently scanned folders keep metadata/layout snapshots in memory. Switching back displays the cached map immediately while a fresh scan runs. Background results never reset the camera or open file; changed results are applied by Refresh. The first scan of a large folder still takes time and shows loading/cancel controls immediately.
 
-This is a local development bundle, not a notarized release. It does not replace or restart Whitespace services. The Operator build checkout is named for its location; its current source is not guaranteed to match the packaged backend.
+This is a development build, not a notarized release.
 
 
 ## Mixed-content atlas
@@ -63,4 +60,4 @@ Audio has native Play/Pause/Replay, seek, skip, player volume, and mute controls
 
 ## Local connections
 
-Atlas has no configured cloud backend, telemetry, upload service, or direct external AI calls. Its configured HTTP destination is the optional Personal kernel at `127.0.0.1:5102`. The file explorer works without that service. HTML previews block scripts and remote assets. Opening a file in its default app hands it to that application's own behavior and permissions.
+Atlas has no configured cloud backend, telemetry, upload service, or direct external AI calls. An optional loopback connection can read from a local service; the file explorer works without it. HTML previews block scripts and remote assets. Opening a file in its default app hands it to that application's own behavior and permissions.

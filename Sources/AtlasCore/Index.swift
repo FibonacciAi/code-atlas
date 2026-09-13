@@ -51,7 +51,7 @@ public enum IndexError: LocalizedError {
 
 public enum SourcePolicy {
     public static let extensions: Set<String> = ["swift","rs","py","js","jsx","ts","tsx","mjs","cjs","c","cc","cpp","cxx","h","hpp","m","mm","metal","glsl","wgsl","go","java","kt","kts","cs","rb","php","html","htm","css","scss","sass","vue","svelte","sh","bash","zsh","sql","proto","ex","exs","clj","scala","dart","lua","r","jl"]
-    public static let excluded: Set<String> = [".git",".whitespace",".ssh",".aws",".config",".codex",".claude",".agents","node_modules","target","build","dist","output","outputs","tmp","temp","venv","env",".venv","__pycache__",".build","deriveddata","vendor","pods","carthage","coverage",".next",".cache","graph","state","secrets","credentials","keychains","fixtures","backups"]
+    public static let excluded: Set<String> = [".git",".ssh",".aws",".config",".codex",".claude",".agents","node_modules","target","build","dist","output","outputs","tmp","temp","venv","env",".venv","__pycache__",".build","deriveddata","vendor","pods","carthage","coverage",".next",".cache","graph","state","secrets","credentials","keychains","fixtures","backups"]
     public static func safeComponents(_ components: [String]) -> Bool {
         !components.contains { item in
             let name = item.lowercased()
@@ -71,10 +71,10 @@ public enum SourcePolicy {
     public static func validateRoot(_ root: URL) -> Bool {
         // Resolve root aliases, but never traverse child symlinks.
         let components = root.resolvingSymlinksInPath().pathComponents.dropFirst()
-        let privateRoots: Set<String> = [".whitespace",".ssh",".aws",".config",".codex",".claude",".agents","graph","state","secrets","credentials","keychains","backups","whitespace backups","whitespace legacy"]
+        let privateRoots: Set<String> = [".ssh",".aws",".config",".codex",".claude",".agents","graph","state","secrets","credentials","keychains","backups"]
         return !components.contains {
             let name=$0.lowercased()
-            return privateRoots.contains(name) || name.contains("credential") || name.contains("secret") || name.contains("dork") || name.hasSuffix(".app")
+            return name.hasPrefix(".") || privateRoots.contains(name) || name.hasSuffix(" backups") || name.hasSuffix(" legacy") || name.contains("credential") || name.contains("secret") || name.contains("dork") || name.hasSuffix(".app")
         }
     }
 }

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="theme-color" content="#101414">
+  <meta name="description" content="Code Atlas is a native macOS spatial file explorer. See folders as a map, zoom into code and documents, and explore images and media in place.">
+  <meta property="og:title" content="Code Atlas — Your files, in perspective">
+  <meta property="og:description" content="From the whole folder to the smallest detail. A native macOS file explorer built with Swift and Metal.">
+  <title>Code Atlas — Your files, in perspective</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%23101414'/%3E%3Cpath d='M12 12h23v23H12zM39 12h13v23H39zM12 39h13v13H12zM29 39h23v13H29z' fill='%23b9edbe'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+  <script src="page.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header shell">
+    <a class="brand" href="#" aria-label="Code Atlas home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Code Atlas<span class="brand-platform">for Mac</span></a>
+    <nav aria-label="Main navigation"><a href="#explore">Explore</a><a href="https://github.com/FibonacciAi/code-atlas" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a><a class="nav-cta" href="#get-atlas">Get Atlas <span aria-hidden="true">↗</span></a></nav>
+  </header>
+  <main id="main">
+    <section class="hero shell" aria-labelledby="hero-title">
+      <div class="hero-heading">
+        <div><p class="eyebrow"><span class="status-dot"></span> A NEW PERSPECTIVE ON YOUR FILES</p><h1 id="hero-title">Get the<br><em>whole picture.</em></h1></div>
+        <div class="hero-intro"><p>A folder becomes a landscape.<br>A file becomes a place you can go.</p><p class="intro-detail">Explore code, documents, and media in a native macOS map. Zoom in to read. Pull back to see how it all fits.</p><a class="button button-primary" href="#watch-demo">See it in motion <span aria-hidden="true">↘</span></a><span class="release-note">Native macOS app · available as source</span></div>
+      </div>
+      <figure class="atlas-demo" id="explore" aria-labelledby="demo-caption">
+        <div class="demo-topline"><span class="demo-title"><span class="tiny-cross" aria-hidden="true">✦</span> THE ACTUAL APP <span>/ generated samples</span></span><div class="view-switch" role="group" aria-label="Screenshot gallery"><button type="button" class="active" data-shot="city" aria-pressed="true">City</button><button type="button" data-shot="map" aria-pressed="false">Map</button><button type="button" data-shot="source" aria-pressed="false">Code</button><button type="button" data-shot="document" aria-pressed="false">Docs</button><button type="button" data-shot="image" aria-pressed="false">Image</button></div></div>
+        <a class="screenshot-link" id="screenshot-link" href="assets/city.png" target="_blank" rel="noopener noreferrer" aria-label="Open full-size screenshot"><img id="app-screenshot" src="assets/city.png" width="2560" height="1610" alt="Code Atlas City view showing an invented Fieldnotes project with Engine, Interface, Index, Tests, Notes, and Artwork folders."></a>
+        <div class="demo-bottomline"><figcaption id="demo-caption"><span class="status-dot"></span> Actual app capture · all content is synthetic</figcaption><a href="#watch-demo" class="demo-hint">Watch it in motion <span aria-hidden="true">↓</span></a></div>
+      </figure>
+      <div class="under-demo"><span>Swift + Metal. Built for the desktop.</span><a href="#get-atlas">From overview to detail <span aria-hidden="true">↓</span></a></div>
+    </section>
+    <section class="story-section shell" aria-labelledby="story-title">
+      <div class="section-heading"><p class="eyebrow">CONTEXT, WITHOUT THE TAB HOPPING</p><h2 id="story-title">From the big picture<br>to the smallest detail.</h2></div>
+      <div class="feature-list">
+        <article><span class="feature-number">01</span><div><h3>Find your bearings.</h3><p>See folders and files as a map. Switch to City for a different perspective on the same layout. Search and color reveal patterns.</p></div></article>
+        <article><span class="feature-number">02</span><div><h3>Go beneath the filename.</h3><p>Zoom into code, read Markdown, preview an image, or play local media. The detail lives inside the place you found it.</p></div></article>
+        <article><span class="feature-number">03</span><div><h3>Keep your place.</h3><p>Scroll back through a document and beyond its beginning to return to the map. Escape offers a direct way back.</p></div></article>
+      </div>
+    </section>
+    <section class="video-section shell" id="watch-demo" aria-labelledby="video-title">
+      <div class="video-heading"><div><p class="eyebrow">A QUICK LOOK INSIDE</p><h2 id="video-title">Overview. Detail. And back.</h2></div><span class="video-label">SILENT DEMO · GENERATED FILES</span></div>
+      <video controls playsinline preload="none" poster="assets/city.png" aria-label="Code Atlas demonstration with generated sample files"><source src="assets/code-atlas-demo.mp4" type="video/mp4"><p>Your browser does not support embedded video. <a href="assets/code-atlas-demo.mp4">Download the demo video.</a></p></video>
+      <div class="video-note"><p>Recorded from the actual native app using only invented code, documents, and artwork. The silent clip moves from Map to City, opens source, a document, and an image, then returns to the overview.</p><a href="assets/code-atlas-demo.mp4" download>Download video <span aria-hidden="true">↓</span></a></div>
+    </section>
+    <section class="privacy-section shell" aria-labelledby="privacy-title"><span class="privacy-icon" aria-hidden="true">⌘</span><div><p class="eyebrow">LOCAL BY DESIGN</p><h2 id="privacy-title">Your files stay with you.</h2><p>The native explorer runs on your Mac, with no configured cloud backend, analytics, or upload service. This public page contains generated demonstration content only and cannot access your files.</p></div></section>
+    <section class="get-section shell" id="get-atlas" aria-labelledby="get-title">
+      <div><p class="eyebrow">TAKE A LOOK AROUND</p><h2 id="get-title">Make room<br>for a new view.</h2><p>Code Atlas is available to build from source.<br>Bring a folder. See what you find.</p><a class="button button-dark" href="https://github.com/FibonacciAi/code-atlas" target="_blank" rel="noopener noreferrer">Explore the source <span aria-hidden="true">↗</span></a></div>
+      <div class="build-card"><div class="build-top"><span>BUILD FOR MACOS</span><button type="button" id="copy-command" aria-label="Copy build commands">Copy <span aria-hidden="true">⧉</span></button></div><pre><code id="build-command">git clone https://github.com/FibonacciAi/code-atlas.git
+cd code-atlas
+./script/build_and_run.sh</code></pre><p>Requires macOS 14+ and Swift 5.10+.<br>Development build; a notarized installer isn’t available yet.</p><a href="https://github.com/FibonacciAi/code-atlas#build-and-checks" target="_blank" rel="noopener noreferrer">Build instructions &amp; current limits <span aria-hidden="true">↗</span></a><span class="copy-status" id="copy-status" role="status"></span></div>
+    </section>
+  </main>
+  <footer class="site-footer shell"><a class="brand" href="#"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Code Atlas</a><p>Your files, in perspective.</p><a href="https://github.com/FibonacciAi/code-atlas" target="_blank" rel="noopener noreferrer">Made to be explored <span aria-hidden="true">↗</span></a></footer>
+</body>
+</html>

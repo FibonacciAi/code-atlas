@@ -1,5 +1,11 @@
 # Code Atlas 0.3.3
 
+[**App page, screenshots & demo video →**](https://fibonacciai.github.io/code-atlas/)
+
+[![Code Atlas City view with generated sample files](site/assets/city.png)](https://fibonacciai.github.io/code-atlas/)
+
+The gallery and silent video show the actual app using only invented code, documents, and artwork. No personal files, desktop content, or microphone audio are included. [Media provenance](docs/public-media.md).
+
 Native macOS file explorer built with Swift, AppKit, and Metal. Zoom from a folder map into readable code, documents, pictures, and playable media. Requires macOS 14 or later and a Swift toolchain. Run `./script/build_and_run.sh` to build and open the app. Normal startup restores your last real folder. Sample mode is available only through the explicit `--demo` developer launch.
 
 ## Explore

@@ -8,6 +8,10 @@ APP_BINARY="$APP_BUNDLE/Contents/MacOS/CodeAtlas"
 # Do not terminate running processes; let the user keep existing windows.
 swift build -c release
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
+RESOURCE_BUNDLE="$(swift build -c release --show-bin-path)/CodeAtlas_CodeAtlas.bundle"
+if [ -d "$RESOURCE_BUNDLE" ]; then
+  /usr/bin/ditto "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/CodeAtlas_CodeAtlas.bundle"
+fi
 cp Assets/AppIcon.icns "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 cp "$(swift build -c release --show-bin-path)/CodeAtlas" "$APP_BINARY.next"
 mv "$APP_BINARY.next" "$APP_BINARY"
@@ -22,8 +26,8 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundleName</key><string>Code Atlas</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.3.3</string>
-<key>CFBundleVersion</key><string>8</string>
+<key>CFBundleShortVersionString</key><string>0.5.0</string>
+<key>CFBundleVersion</key><string>10</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSPrincipalClass</key><string>NSApplication</string>
 <key>NSHighResolutionCapable</key><true/>

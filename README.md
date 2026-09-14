@@ -1,4 +1,4 @@
-# Code Atlas 0.3.3
+# Code Atlas 0.5.0
 
 [**App page, screenshots & demo video →**](https://fibonacciai.github.io/code-atlas/)
 
@@ -19,9 +19,23 @@ Native macOS file explorer built with Swift, AppKit, and Metal. Zoom from a fold
 - Selecting a file opens the inspector: styled source, lexical outline, local import candidates, and bounded textual occurrence search. These are not semantic definitions or references.
 - Nearby visible tiles request bounded source previews automatically. Text is drawn through AppKit over instanced Metal geometry. Image, video, and PDF thumbnails are instanced in the same Metal render pass as their tiles, with pinned visible slots to prevent reload flashing.
 
-## Optional local integration
+## One workspace, three views
 
-An optional local service can supply a read-only view of connected information. The file explorer works independently. Closing that view clears its retained content.
+Map, City, and Graph are top-level views of the same workspace. File selection and the inspector stay shared. Returning from Graph preserves the spatial camera. Command–Option–M/C/G switches views; Command–F searches files in every view.
+
+Graph uses bundled Mermaid 11.12.2, entirely offline. It draws bounded local import candidates, Markdown links, and any supplied context relationships. The footer states coverage: a maximum of 100 displayed nodes and edges, with source text read from at most 80 files in 24 KiB slices. Search or select a file to narrow the view. Import candidates are lexical matches, not semantic compiler analysis. Isolated files are shown without invented relationships.
+
+Connections opens the shared inspector, not another workspace or window. An explicit question requests a bounded projection from an optional local service. Selecting a graph entity shows its supplied claims, source references, and relationships in that inspector. Evidence is associated with files only when a supplied reference exactly matches an allowed indexed file; those source tiles highlight in Map and City. A file remains usable without any connected service.
+
+The client discovers its read contract first and uses only issued scopes. No raw graph files, graph writes, or remote embeddings are involved. The graph renderer receives bounded display labels and generated aliases, never credentials, evidence payloads, or filesystem access outside its bundled assets. Loaded context remains in memory. Clear, changing folders, and closing the window cancel outstanding reads and remove results. A window that has requested connected context stays protected from capture for its lifetime. Connection options holds an optional memory-only scoped read token.
+
+Developer verification uses explicitly generated fixtures. Normal launches restore only folders the user has opened.
+
+## Save and navigate
+
+Use File → Save View (Command-S) to keep the folder, file filters, selection, and view mode locally. File → Restore Saved View (Command-Option-S) restores those settings; camera positions are not saved. File → Export Graph saves a `.md` document containing the file relationship diagram in a fenced Mermaid block. Export is unavailable while connected context is loaded.
+
+In Graph, use Selection + neighbors for a focused relationship view. Zooming into a file node opens the native reader; scrolling up beyond the top, pinching out, or pressing Escape closes it back to the same graph camera. Dashed edges denote lexical import candidates, not resolved compiler dependencies.
 
 ## Performance and limits
 
@@ -29,7 +43,7 @@ The packaged app uses an optimized release build. Camera transitions use monoton
 
 The source index is memory-only and never writes to selected repositories. Git listing honors ignore rules with timeout/cancellation and a 32 MiB output bound. Non-Git roots use a filtered walk. Source extensions are allowlisted; hidden entries, private graph/state, secrets/credential filenames, excluded project folders, symlinks, binary files, dependencies, and generated output are excluded. File size limit: 4 MiB; count limit: 50,000. Filtering is not a general secret detector for arbitrary source contents.
 
-Source preview cache holds up to 32 bounded snippets, with four requests in flight. Inspector source is capped at 128 KiB. Textual occurrence search is capped at 5,000 indexed files. Semantic analysis, incremental watching, a GPU glyph atlas, and synchronized relationship diagrams remain future work. Sustained 120 Hz and 2.5-million-line performance have not been measured.
+Source preview cache holds up to 32 bounded snippets, with four requests in flight. Inspector source is capped at 128 KiB. Textual occurrence search is capped at 5,000 indexed files. Semantic analysis, incremental watching, and a GPU glyph atlas remain future work. Sustained 120 Hz and 2.5-million-line performance have not been measured.
 
 ## Build and checks
 
@@ -37,16 +51,14 @@ Source preview cache holds up to 32 bounded snippets, with four requests in flig
 swift test
 ./script/build_and_run.sh --build-only
 .build/release/CodeAtlas --audit /path/to/source
+.build/release/CodeAtlas --verify-workspace-ui
 ```
 
-The test suite covers layout, indexing, cancellation, private-path and symlink exclusions, Git status, lexical relationships, project validation, local projection validation, thumbnail residency, and scroll direction/transition boundaries. Native UI verification and live-client verification are separate from these tests.
-
-The isolated verification bundle (`local.codeatlas.verification`) runs only generated local files. `--verify-preview-ui` exercises the real map and preview classes; `--verify-project-ui` exercises the normal folder-switch UI with two generated roots and separate preferences. Neither loads saved repositories or connected information. Normal launches never enter verification mode.
+The test suite covers indexing, layout, graph escaping and limits, source matching, cancellation, syntax, outlines, Git state, private-path exclusions, and navigation boundaries. `--verify-workspace-ui` uses generated files and an injected service to exercise actual Mermaid rendering, shared selection, context inspection, cancellation, and folder switching. It writes aggregate verification results and test-window captures into the temporary directory, then exits. It never loads saved workspaces or live connected context.
 
 Three recently scanned folders keep metadata/layout snapshots in memory. Switching back displays the cached map immediately while a fresh scan runs. Background results never reset the camera or open file; changed results are applied by Refresh. The first scan of a large folder still takes time and shows loading/cancel controls immediately.
 
-This is a development build, not a notarized release.
-
+This is a local development build, not a notarized release.
 
 ## Mixed-content atlas
 
@@ -60,4 +72,4 @@ Audio has native Play/Pause/Replay, seek, skip, player volume, and mute controls
 
 ## Local connections
 
-Atlas has no configured cloud backend, telemetry, upload service, or direct external AI calls. An optional loopback connection can read from a local service; the file explorer works without it. HTML previews block scripts and remote assets. Opening a file in its default app hands it to that application's own behavior and permissions.
+Atlas has no configured cloud backend, telemetry, upload service, or direct external AI calls. Its optional context connection is loopback-only. The file explorer works without that service. HTML previews block scripts and remote assets. Mermaid executes only its bundled renderer; network requests and external navigation are blocked. Opening a file in its default app hands it to that application's own behavior and permissions.

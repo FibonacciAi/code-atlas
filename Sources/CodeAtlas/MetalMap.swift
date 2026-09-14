@@ -29,6 +29,7 @@ final class MetalMap: MTKView, MTKViewDelegate {
     private var previewGeneration=UUID()
     private var cameraAnimation:Timer?
     private var history:[(CGPoint,CGFloat)]=[]
+    var relatedFiles=Set<Int>() {didSet {if relatedFiles != oldValue {rebuild();invalidate()}}}
     var selected: Int? { didSet { if selected != oldValue { rebuild(); invalidate() } } }
     var query = "" { didSet { if query != oldValue { rebuild(); invalidate() } } }
     var selectedSource = "" { didSet { overlay.needsDisplay = true } }
@@ -68,6 +69,11 @@ final class MetalMap: MTKView, MTKViewDelegate {
     private var readerGeneration=UUID()
     private var readerReturn:(CGPoint,CGFloat)?
     private var readerOrigin=CGRect.zero
+    private var externalReaderOrigin:CGRect?
+    private var readerFromGraph=false
+    var onGraphReaderClose:(()->Void)?
+    var hasOpenReader:Bool {reader != nil || contentPreview != nil}
+    func closeReader() {dismissReader(animated:true)}
     private var readerFileID:Int?
     private var previewNavigation:PreviewNavigation?
     private var gestureGate=PreviewGestureGate()
@@ -186,6 +192,7 @@ final class MetalMap: MTKView, MTKViewDelegate {
             let isMatch=(visibleMatches?.contains(tile.fileID) ?? true) && (query.isEmpty || file.path.localizedCaseInsensitiveContains(query))
             if !isMatch { color *= 0.20 }
             color *= 0.72
+            if relatedFiles.contains(tile.fileID) {color=SIMD3(0.35,0.82,0.64)}
             if selected == tile.fileID { color=SIMD3(0.50,0.86,0.92) }
             let r=tile.rect
             return GPUInstance(rect:SIMD4(Float(r.x),Float(r.y),Float(r.w),Float(r.h)),color:SIMD4(color,1),extra:SIMD4(Float(tile.height),0,0,0))
@@ -322,6 +329,14 @@ final class MetalMap: MTKView, MTKViewDelegate {
         if factor>1 && allowEntry { considerReader(at:point) }
     }
     func openFile(_ id:Int) {considerReader(at:CGPoint(x:bounds.midX,y:bounds.midY),forceID:id)}
+    func openFileFromGraph(_ id:Int, rect:CGRect) {
+        guard !hasOpenReader else {return}
+        externalReaderOrigin=rect;openFile(id);externalReaderOrigin=nil
+    }
+    func suspendInteraction() {
+        cameraAnimation?.invalidate();animation?.invalidate()
+        contentPreview?.pausePlayback()
+    }
     private func considerReader(at point:CGPoint, forceID:Int?=nil) {
         guard reader == nil, contentPreview == nil, zoom>1.4 || forceID != nil, let index, let id=forceID ?? hit(point),
               visibleMatches?.contains(id) ?? true,
@@ -332,16 +347,17 @@ final class MetalMap: MTKView, MTKViewDelegate {
         guard forceID != nil || (visible.width>min(380,bounds.width*0.6) && visible.height>min(260,bounds.height*0.5)) || (zoom>=70 && visible.width>12 && visible.height>12) else {return}
         cameraAnimation?.invalidate(); if selected != id {selectedSource=""}; selected=id; onPreviewSelection?(id)
         readerReturn=(center,forceID == nil ? zoom*0.72 : zoom)
-        readerOrigin=usableOrigin(visible); readerFileID=id
+        readerFromGraph=externalReaderOrigin != nil
+        readerOrigin=usableOrigin(externalReaderOrigin ?? visible); externalReaderOrigin=nil; readerFileID=id
         if index.files[id].kind != .code {
             guard let url=try? RepoIndexer.validatedURL(root:index.root,path:index.files[id].path) else {return}
-            let preview=ContentPreview(url:url,kind:index.files[id].kind)
+            let preview=ContentPreview(url:url,kind:index.files[id].kind,returnTitle:readerFromGraph ? "Graph":"Map")
             contentPreview=preview
             preview.onClose={ [weak self] in self?.dismissReader(animated:true) }
             presentPreview(preview,position:{[weak preview] in preview?.scrollPosition ?? .canvas},responder:{[weak preview] in preview?.preferredResponder})
             return
         }
-        let view=ImmersiveSource(path:index.files[id].path), generation=UUID()
+        let view=ImmersiveSource(path:index.files[id].path,returnTitle:readerFromGraph ? "Graph":"Map"), generation=UUID()
         readerGeneration=generation; reader=view
         view.onExit={ [weak self] in self?.dismissReader(animated:true) }
         presentPreview(view,position:{[weak view] in .document(atTop:(view?.scroll.contentView.bounds.minY ?? 0)<=1)},responder:{[weak view] in view?.text})
@@ -406,11 +422,13 @@ final class MetalMap: MTKView, MTKViewDelegate {
         contentPreview=nil;reader=nil; readerGeneration=UUID()
         gestureGate.exit(at:ProcessInfo.processInfo.systemUptime)
         if let previous=readerReturn { center=previous.0; zoom=previous.1; tilt=cityTilt(at:zoom) }; readerReturn=nil
-        if let id=readerFileID, let tile=layoutData.tiles.first(where:{$0.fileID==id}) {
+        if !readerFromGraph,let id=readerFileID, let tile=layoutData.tiles.first(where:{$0.fileID==id}) {
             let corners=polygon(tile), xs=corners.map(\.x), ys=corners.map(\.y)
             readerOrigin=usableOrigin(CGRect(x:xs.min()!,y:ys.min()!,width:xs.max()!-xs.min()!,height:ys.max()!-ys.min()!).intersection(bounds))
         }
-        window?.makeFirstResponder(self); invalidate()
+        let returningToGraph=readerFromGraph;readerFromGraph=false
+        if returningToGraph {onGraphReaderClose?()} else {window?.makeFirstResponder(self)}
+        invalidate()
         if !animated {view.layer?.removeAllAnimations();view.removeFromSuperview();return}
         animatePreview(view,tileRect:readerOrigin,opening:false) {view.removeFromSuperview()}
     }

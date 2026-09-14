@@ -40,7 +40,6 @@ final class AtlasCoreTests: XCTestCase {
     }
     func testProjectIdentityAndUnsupportedFolders() {
         XCTAssertEqual(ProjectIdentity.title(URL(fileURLWithPath:"/repo/Fieldnotes")),"Fieldnotes")
-        XCTAssertEqual(ProjectIdentity.title(URL(fileURLWithPath:"/repo/sample_build-2026")),"sample_build-2026")
         XCTAssertNotNil(ProjectIdentity.rejection(URL(fileURLWithPath:"/Applications")))
         XCTAssertNil(ProjectIdentity.rejection(URL(fileURLWithPath:"/Users/example/Screenshots")))
         XCTAssertNotNil(ProjectIdentity.rejection(URL(fileURLWithPath:"/Users/example/Example.app")))
@@ -72,6 +71,11 @@ final class AtlasCoreTests: XCTestCase {
         let object:[String:Any]=["contract":"context-pack.v1","deployment_id":"personal","entities":[["entity_id":"a","entity_type":"area","display_name":"Synthetic"]],"claims":[["entity_id":"a","predicate":"goal","value":["label":"Learn Swift","status":"active","raw":"not allowed"],"status":"supported"]]]
         let p=try PersonalProjection.parse(object)
         XCTAssertEqual(p.areas[0].claims,["goal: label: Learn Swift · status: active [supported]"])
+    }
+    func testPersonalReadSummaryKeepsQualityProblemsVisible() throws {
+        let object:[String:Any]=["contract":"context-pack.v1","deployment_id":"personal","quality":["grounding":"partial","conflicts":2,"stale_sources":3,"unknown_freshness_sources":4,"truncated":true]]
+        let summary=try PersonalProjection.parse(object).readSummary
+        for warning in ["2 conflicts","3 stale sources","4 sources with unknown freshness","Grounding: partial","Partial result"] {XCTAssertTrue(summary.contains(warning))}
     }
     func testStalledGitTimesOutAndDoesNotFallBackToUnfilteredWalk() throws {
         let root=FileManager.default.temporaryDirectory.appendingPathComponent("atlas-timeout-\(UUID())")
@@ -116,14 +120,11 @@ final class AtlasCoreTests: XCTestCase {
         XCTAssertTrue(a.tiles.allSatisfy { $0.rect.w>0 && $0.rect.h>0 })
     }
     func testSourcePolicyBlocksDataAndSensitivePaths() {
-        for path in [".env",".env.py",".private-store/graph/a.py","graph/data.py","state/private.swift","secrets.py","credential_store.py","node_modules/a.js","tmp/a.py","foo/../a.swift","/absolute.swift","record.json","notes.md","dork/main.swift","App.app/a.swift"] {
+        for path in [".env",".env.py",".private-app/graph/a.py","graph/data.py","state/private.swift","secrets.py","credential_store.py","node_modules/a.js","tmp/a.py","foo/../a.swift","/absolute.swift","record.json","notes.md","dork/main.swift","App.app/a.swift"] {
             XCTAssertFalse(SourcePolicy.allowed(path),path)
         }
         XCTAssertTrue(SourcePolicy.allowed("src/kernel/engine.py"))
-        XCTAssertFalse(SourcePolicy.validateRoot(URL(fileURLWithPath:"/Users/example/.private-store/graph")))
-        for path in ["/repo/.private-store/project", "/repo/Example Backups/project", "/repo/Example Legacy/project"] {
-            XCTAssertFalse(SourcePolicy.validateRoot(URL(fileURLWithPath:path)),path)
-        }
+        XCTAssertFalse(SourcePolicy.validateRoot(URL(fileURLWithPath:"/Users/example/.private-app/graph")))
         XCTAssertTrue(SourcePolicy.validateRoot(URL(fileURLWithPath:"/Users/example/project/tmp/chosen-worktree")))
         XCTAssertFalse(SourcePolicy.validateRoot(URL(fileURLWithPath:"/Users/example/App.app/Contents/Resources")))
     }

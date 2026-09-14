@@ -14,6 +14,7 @@ public struct PersonalProjection: Sendable {
     public let links:[PersonalLink]
     public let receipt:String
     public let quality:String
+    public let readSummary:String
     public let generated:String
     public let grants:[String]
     public static func parse(_ object:[String:Any]) throws -> PersonalProjection {
@@ -49,7 +50,13 @@ public struct PersonalProjection: Sendable {
         let q=object["quality"] as? [String:Any] ?? [:]
         let quality="Grounding: \(q["grounding"] as? String ?? "unknown") · fresh sources: \(q["fresh_sources"] as? Int ?? 0) · stale: \(q["stale_sources"] as? Int ?? 0) · unknown: \(q["unknown_freshness_sources"] as? Int ?? 0) · conflicts: \(q["conflicts"] as? Int ?? 0)\n\((q["truncated"] as? Bool == true) ? "Partial selection" : "Bounded query result, not a complete life inventory") · \((object["gaps"] as? [Any] ?? []).count) reported gaps"
         let scope=object["scope"] as? [String:Any] ?? [:]
-        return PersonalProjection(areas:areas,links:links,receipt:object["pack_id"] as? String ?? "Unavailable",quality:quality,generated:object["generated_at"] as? String ?? "Unknown",grants:scope["allowed_privacy"] as? [String] ?? [])
+        var summary=["\(areas.count) results", "\(links.count) connections"]
+        for (key,label) in [("conflicts","conflicts"),("stale_sources","stale sources"),("unknown_freshness_sources","sources with unknown freshness")] {
+            if let count=q[key] as? Int,count>0 {summary.append("\(count) \(label)")}
+        }
+        if q["grounding"] as? String != "supported" {summary.append("Grounding: \(q["grounding"] as? String ?? "unknown")")}
+        if q["truncated"] as? Bool == true {summary.append("Partial result")}
+        return PersonalProjection(areas:areas,links:links,receipt:object["pack_id"] as? String ?? "Unavailable",quality:quality,readSummary:summary.joined(separator:" · "),generated:object["generated_at"] as? String ?? "Unknown",grants:scope["allowed_privacy"] as? [String] ?? [])
     }
 }
 public enum ProjectionError: LocalizedError {

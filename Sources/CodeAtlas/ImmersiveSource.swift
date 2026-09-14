@@ -9,12 +9,14 @@ final class ImmersiveSource: NSView {
     private let heading=NSTextField(labelWithString:"")
     private let hint=NSTextField(labelWithString:"Scroll to read · Keep scrolling up at the top to return · Esc")
     override var isFlipped:Bool {true}
-    init(path:String) {
+    private var returnTitle="Map"
+    init(path:String,returnTitle:String="Map") {
+        self.returnTitle=returnTitle
         super.init(frame:.zero)
         wantsLayer=true; layer?.backgroundColor=NSColor(calibratedRed:0.04,green:0.065,blue:0.09,alpha:1).cgColor; layer?.cornerRadius=10; layer?.masksToBounds=true
         heading.stringValue=path; heading.font = .systemFont(ofSize:13,weight:.semibold); heading.lineBreakMode = .byTruncatingMiddle
         heading.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)
-        let back=NSButton(title:"← Map  ·  Esc",target:self,action:#selector(exitReader)); back.bezelStyle = .rounded
+        let back=NSButton(title:"← \(returnTitle)  ·  Esc",target:self,action:#selector(exitReader)); back.bezelStyle = .rounded
         let bar=NSStackView(views:[back,heading]); bar.spacing=14; bar.detachesHiddenViews=false; bar.translatesAutoresizingMaskIntoConstraints=false; addSubview(bar)
         scroll.translatesAutoresizingMaskIntoConstraints=false; scroll.hasVerticalScroller=true; scroll.hasHorizontalScroller=false; scroll.drawsBackground=false; scroll.verticalScrollElasticity = .none
         text.isEditable=false; text.isSelectable=true; text.isRichText=false; text.drawsBackground=false; text.isVerticallyResizable=true; text.autoresizingMask=[.width]; text.textContainer?.widthTracksTextView=true; text.textContainerInset=NSSize(width:22,height:18)
@@ -38,7 +40,7 @@ final class ImmersiveSource: NSView {
     @objc private func exitReader() {onExit?()}
     override func cancelOperation(_ sender:Any?) {onExit?()}
     func setPullProgress(_ progress:Double) {
-        hint.stringValue=progress>0 ? "↑ Keep scrolling up to return to the map" : "Scroll to read · Keep scrolling up at the top to return · Esc"
+        hint.stringValue=progress>0 ? "↑ Keep scrolling up to return to \(returnTitle)" : "Scroll to read · Keep scrolling up at the top to return · Esc"
         hint.textColor=progress>0 ? .controlAccentColor : .secondaryLabelColor
     }
     func show(_ content:String) {

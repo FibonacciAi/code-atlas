@@ -126,6 +126,7 @@ final class AudioPreview:NSView {
         }
     }
     required init?(coder:NSCoder) {fatalError()}
+    func pausePlayback() {guard !stopped else {return};player.pause();updatePlaybackState()}
     deinit {stop()}
     func stop() {
         guard !stopped else {return}

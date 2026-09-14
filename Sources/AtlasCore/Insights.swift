@@ -29,25 +29,54 @@ public enum LocalGit {
         guard p.terminationStatus==0 else { throw IndexError.gitUnavailable }
         return data
     }
+
+    /// The nearest enclosing repository, so opening a subfolder of a checkout
+    /// still reports Git state instead of silently falling back to "unavailable".
+    public static func repositoryRoot(for folder: URL, limit: Int = 12) -> URL? {
+        var current=folder.resolvingSymlinksInPath().standardizedFileURL
+        for _ in 0..<limit {
+            if FileManager.default.fileExists(atPath:current.appendingPathComponent(".git").path) { return current }
+            let parent=current.deletingLastPathComponent().standardizedFileURL
+            if parent.path==current.path || current.path=="/" { return nil }
+            current=parent
+        }
+        return nil
+    }
+
+    /// Path prefix that turns a repository-relative path into a folder-relative
+    /// one. Empty when the folder is the repository root.
+    public static func relativePrefix(of folder: URL, in repository: URL) -> String {
+        let folderPath=folder.resolvingSymlinksInPath().standardizedFileURL.path
+        let repositoryPath=repository.resolvingSymlinksInPath().standardizedFileURL.path
+        guard folderPath != repositoryPath, folderPath.hasPrefix(repositoryPath+"/") else { return "" }
+        return String(folderPath.dropFirst(repositoryPath.count+1))+"/"
+    }
 }
 
 public struct GitChanges: Sendable {
     public let statuses: [String:String]
     public var deleted: Int { statuses.values.filter{$0.contains("D")}.count }
-    public static func parse(_ data: Data) -> GitChanges {
+    public static func parse(_ data: Data, strippingPrefix prefix: String = "") -> GitChanges {
         let records=data.split(separator:0,omittingEmptySubsequences:false)
         var statuses: [String:String]=[:]; var i=0
         while i<records.count {
             let record=String(decoding:records[i],as:UTF8.self); i += 1
             guard record.utf8.count>=4 else { continue }
-            let state=String(record.prefix(2)), path=String(record.dropFirst(3))
-            if SourcePolicy.allowed(path) { statuses[path]=state }
+            let state=String(record.prefix(2)); var path=String(record.dropFirst(3))
             if state.contains("R") || state.contains("C") { i += 1 }
+            if !prefix.isEmpty {
+                // Paths outside the opened folder belong to the wider repository.
+                guard path.hasPrefix(prefix) else { continue }
+                path=String(path.dropFirst(prefix.count))
+            }
+            if SourcePolicy.allowed(path) { statuses[path]=state }
         }
         return GitChanges(statuses:statuses)
     }
     public static func read(_ root: URL, cancelled: () -> Bool = {false}) throws -> GitChanges {
-        parse(try LocalGit.run(root:root,arguments:["status","--porcelain=v1","-z","--untracked-files=all"],cancelled:cancelled))
+        guard let repository=LocalGit.repositoryRoot(for:root) else { throw IndexError.gitUnavailable }
+        let data=try LocalGit.run(root:repository,arguments:["status","--porcelain=v1","-z","--untracked-files=all"],cancelled:cancelled)
+        return parse(data,strippingPrefix:LocalGit.relativePrefix(of:root,in:repository))
     }
 }
 

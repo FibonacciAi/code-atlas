@@ -105,6 +105,16 @@ public enum RepoIndexer {
         guard !data.contains(0) else { throw IndexError.unreadable }
         return data
     }
+    /// Counts newlines over the raw buffer. `Data.reduce` dominated scan time on
+    /// large folders because every byte went through Data's element subscript.
+    static func countLines(_ data: Data) -> Int {
+        let newlines = data.withUnsafeBytes { buffer -> Int in
+            var total = 0
+            for byte in buffer where byte == 10 { total += 1 }
+            return total
+        }
+        return newlines + (data.last == 10 ? 0 : 1)
+    }
     public static func scan(_ input: URL, includeMedia:Bool = false, cancelled: () -> Bool = { false }) throws -> RepositoryIndex {
         let start = Date()
         let root = input.resolvingSymlinksInPath().standardizedFileURL
@@ -125,7 +135,7 @@ public enum RepoIndexer {
                 files.append(SourceFile(path:path,lines:0,bytes:bytes)); return
             }
             guard let data = try? readSource(root: root, path: path), data.count <= maxFileBytes, String(data: data, encoding: .utf8) != nil else { skipped += 1; return }
-            let lines = data.isEmpty ? 0 : data.reduce(0) { $0 + ($1 == 10 ? 1 : 0) } + (data.last == 10 ? 0 : 1)
+            let lines = data.isEmpty ? 0 : countLines(data)
             files.append(SourceFile(path: path, lines: lines, bytes: data.count))
         }
         if let paths = gitPaths {
@@ -150,9 +160,17 @@ public enum RepoIndexer {
         return RepositoryIndex(root: root, files: files.sorted { $0.path < $1.path }, skipped: skipped, limited: limited, seconds: Date().timeIntervalSince(start), usesGitIgnore: gitPaths != nil)
     }
     static func gitFiles(_ root: URL, cancelled: () -> Bool, executable: URL = URL(fileURLWithPath:"/usr/bin/git"), timeout: TimeInterval = 8) throws -> [String]? {
-        // Only use Git when the selected folder is a repository root, not its parent.
-        guard FileManager.default.fileExists(atPath: root.appendingPathComponent(".git").path) else { return nil }
-        let data=try LocalGit.run(root:root,arguments:["ls-files","-z","--cached","--others","--exclude-standard"],cancelled:cancelled,timeout:timeout,executable:executable)
-        return Array(Set(data.split(separator: 0).compactMap { String(data: $0, encoding: .utf8) })).sorted()
+        // A subfolder of a checkout is still inside the repository: ask the nearest
+        // enclosing one and keep only the paths under the folder that was opened.
+        guard let repository=LocalGit.repositoryRoot(for:root) else { return nil }
+        let data=try LocalGit.run(root:repository,arguments:["ls-files","-z","--cached","--others","--exclude-standard"],cancelled:cancelled,timeout:timeout,executable:executable)
+        let prefix=LocalGit.relativePrefix(of:root,in:repository)
+        var paths=Set<String>()
+        for slice in data.split(separator:0) {
+            guard let path=String(data:slice,encoding:.utf8), !path.isEmpty else { continue }
+            if prefix.isEmpty { paths.insert(path) }
+            else if path.hasPrefix(prefix) { paths.insert(String(path.dropFirst(prefix.count))) }
+        }
+        return paths.sorted()
     }
 }

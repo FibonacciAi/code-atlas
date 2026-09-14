@@ -24,7 +24,7 @@ final class PreviewNavigation {
     }
     deinit {if let monitor {NSEvent.removeMonitor(monitor)}}
     private func handle(_ event:NSEvent)->NSEvent? {
-        guard let view,let window=view.window,event.window === window else {return event}
+        guard let view,!view.isHiddenOrHasHiddenAncestor,let window=view.window,event.window === window else {return event}
         // WebKit and AVKit do not reliably forward cancelOperation up the chain.
         if event.type == .keyDown {
             if event.keyCode == 53 {exit();return nil}

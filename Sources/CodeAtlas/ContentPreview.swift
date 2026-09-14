@@ -63,6 +63,7 @@ final class ContentPreview: NSView, WKNavigationDelegate {
         stopped=true; audioPreview?.stop(); player?.pause(); playerStatus=nil
         webPoll?.invalidate(); webPoll=nil; web?.stopLoading()
     }
+    func pausePlayback() {audioPreview?.pausePlayback();player?.pause()}
     func didPresent() {
         guard positionPDFAtStart,let pdf=pdfView,let document=pdf.document else {return}
         positionPDFAtStart=false
@@ -96,14 +97,14 @@ final class ContentPreview: NSView, WKNavigationDelegate {
     override var isFlipped:Bool {true}
     override var acceptsFirstResponder:Bool {true}
 
-    init(url:URL,kind:ContentKind) {
+    init(url:URL,kind:ContentKind,returnTitle:String="Map") {
         self.url=url
         super.init(frame:.zero)
         wantsLayer=true
         layer?.backgroundColor=NSColor(calibratedRed:0.04,green:0.065,blue:0.09,alpha:1).cgColor
         body.wantsLayer=true; body.layer?.masksToBounds=true
         layer?.cornerRadius=12; layer?.masksToBounds=true
-        let close=NSButton(title:"← Map · Esc",target:self,action:#selector(closePreview))
+        let close=NSButton(title:"← \(returnTitle) · Esc",target:self,action:#selector(closePreview))
         let title=NSTextField(labelWithString:url.lastPathComponent)
         title.font = .systemFont(ofSize:14,weight:.semibold); title.lineBreakMode = .byTruncatingMiddle
         title.setContentCompressionResistancePriority(.defaultLow,for:.horizontal)

@@ -9,8 +9,9 @@ public struct WorkspaceGraph: Sendable {
         public let kind: String
         public let fileID: Int?
         public let contextID: String?
-        public init(id: String, title: String, kind: String, fileID: Int? = nil, contextID: String? = nil) {
-            self.id = id; self.title = title; self.kind = kind; self.fileID = fileID; self.contextID = contextID
+        public let folderPath: String?
+        public init(id: String, title: String, kind: String, fileID: Int? = nil, contextID: String? = nil, folderPath:String? = nil) {
+            self.id = id; self.title = title; self.kind = kind; self.fileID = fileID; self.contextID = contextID; self.folderPath=folderPath
         }
     }
     public struct Edge: Sendable, Equatable {
@@ -26,6 +27,8 @@ public struct WorkspaceGraph: Sendable {
     /// Mermaid aliases are intentionally generated rather than derived from paths.
     public let aliasToNodeID: [String: String]
     public var nodeIDByAlias: [String: String] { aliasToNodeID }
+    public private(set) var pageCount=1
+    public private(set) var page=0
     public let totalNodeCount: Int
     public let totalEdgeCount: Int
     public let truncatedNodeCount: Int
@@ -39,13 +42,13 @@ public struct WorkspaceGraph: Sendable {
         self.scanSummary = scanSummary
         self.aliasToNodeID = Dictionary(uniqueKeysWithValues: nodes.enumerated().map { ("n\($0.offset)", $0.element.id) })
         var parts = ["\(nodes.count) of \(totalNodes) nodes", "\(edges.count) of \(totalEdges) edges"]
-        if truncatedNodes > 0 { parts.append("\(truncatedNodes) nodes omitted") }
-        if truncatedEdges > 0 { parts.append("\(truncatedEdges) edges omitted") }
+        if truncatedNodes > 0 { parts.append("\(truncatedNodes) nodes outside this display page") }
+        if truncatedEdges > 0 { parts.append("\(truncatedEdges) edges outside this display page") }
         parts.append(scanSummary)
         self.summary = parts.joined(separator: " · ")
     }
 
-    public static func build(index: RepositoryIndex, fileIDs: [Int], sources: [Int: String], projection: PersonalProjection? = nil, selectedFileID: Int? = nil, maxNodes: Int = 100, selectedNeighborhoodOnly: Bool = false) -> WorkspaceGraph {
+    public static func build(index: RepositoryIndex, fileIDs: [Int], sources: [Int: String], projection: PersonalProjection? = nil, selectedFileID: Int? = nil, maxNodes: Int = 100, selectedNeighborhoodOnly: Bool = false, relationships:RelationshipIndex? = nil, folder:String? = nil, page:Int = 0) -> WorkspaceGraph {
         let limit = min(100, max(0, maxNodes))
         var requestedIDs = Set(fileIDs.filter { index.files.indices.contains($0) })
         if let selectedFileID, index.files.indices.contains(selectedFileID) { requestedIDs.insert(selectedFileID) }
@@ -58,7 +61,13 @@ public struct WorkspaceGraph: Sendable {
         func add(_ edge: Edge) { let key = "\(edge.from)\u{1f}\(edge.to)\u{1f}\(edge.label)"; if seenEdges.insert(key).inserted { allEdges.append(edge) } }
 
         let fileSet = Set(validFiles)
-        for id in validFiles {
+        if let relationships {
+            let allowed=Set(validFiles.map {"file:"+index.files[$0].path})
+            for edge in relationships.edges where allowed.contains(edge.from) && allowed.contains(edge.to) {
+                add(edge);if edge.label.hasPrefix("import candidate") {importCandidates += 1}
+            }
+        }
+        for id in (relationships == nil ? validFiles : []) {
             guard let source = sources[id] else { continue }
             let links = ImportLinks.find(source: source, file: index.files[id], files: index.files)
             for target in links.resolved where fileSet.contains(target) { importCandidates += 1; add(Edge(from: "file:\(index.files[id].path)", to: "file:\(index.files[target].path)", label: "import candidate")) }
@@ -90,34 +99,59 @@ public struct WorkspaceGraph: Sendable {
             }
         }
 
-        allNodes = allNodes.sorted { $0.id < $1.id }
-        allEdges = allEdges.sorted { ($0.from, $0.to, $0.label) < ($1.from, $1.to, $1.label) }
-        let totalNodes = allNodes.count, totalEdges = allEdges.count
-        var keep = Set<String>()
-        var priority: [String] = []
-        var neighborhoodActive = false
-        func prioritize(_ id: String) { if !keep.contains(id) { keep.insert(id); priority.append(id) } }
-        if let selectedFileID, let selected = allNodes.first(where: { $0.fileID == selectedFileID }) {
-            neighborhoodActive = selectedNeighborhoodOnly
-            prioritize(selected.id)
-            let neighbors = allEdges.flatMap { edge -> [String] in
-                edge.from == selected.id ? [edge.to] : (edge.to == selected.id ? [edge.from] : [])
+        allNodes.sort {$0.id<$1.id}
+        allEdges.sort {($0.from,$0.to,$0.label)<($1.from,$1.to,$1.label)}
+        let fullNodes=allNodes.count, fullEdges=allEdges.count
+        let coverage=relationships?.summary ?? "bounded scan of \(sources.count) readable sources"
+        var detail="\(importCandidates) lexical import candidates · \(evidenceLinks) supplied evidence links"
+        if selectedNeighborhoodOnly,let selectedFileID,let selected=allNodes.first(where:{$0.fileID==selectedFileID}) {
+            var connected=Set([selected.id])
+            for edge in allEdges {
+                if edge.from==selected.id {connected.insert(edge.to)}
+                if edge.to==selected.id {connected.insert(edge.from)}
             }
-            neighbors.sorted().forEach { prioritize($0) }
+            allNodes=allNodes.filter {connected.contains($0.id)}
+            allEdges=allEdges.filter {connected.contains($0.from) && connected.contains($0.to)}
+            allNodes.sort {a,b in a.id != b.id && (a.id==selected.id || (b.id != selected.id && a.id<b.id))}
+            detail="Selected file + direct neighbors · "+detail
+        } else if (relationships != nil && allNodes.count>limit) || folder != nil {
+            // Collapse presentation by actual folder, retaining the full relationship index.
+            let prefix=folder.map {$0.isEmpty ? "":$0+"/"} ?? ""
+            var mapped:[String:String]=[:], grouped:[String:Node]=[:], counts:[String:Int]=[:]
+            for node in allNodes {
+                guard let fileID=node.fileID else {mapped[node.id]=node.id;grouped[node.id]=node;continue}
+                let path=index.files[fileID].path
+                guard path.hasPrefix(prefix) else {continue}
+                let relative=String(path.dropFirst(prefix.count)), pieces=relative.split(separator:"/")
+                if pieces.count>1,let first=pieces.first {
+                    let path=prefix+String(first),id="folder:"+path
+                    mapped[node.id]=id;counts[id,default:0]+=1
+                    grouped[id]=Node(id:id,title:String(first),kind:"folder",folderPath:path)
+                } else {mapped[node.id]=node.id;grouped[node.id]=node}
+            }
+            for (id,count) in counts {if let n=grouped[id] {grouped[id]=Node(id:id,title:n.title,kind:"folder · \(count) files",folderPath:n.folderPath)}}
+            var aggregates:[String:(String,String,String,Int)]=[:]
+            for edge in allEdges {
+                guard let from=mapped[edge.from],let to=mapped[edge.to],from != to else {continue}
+                let key=from+"\u{1f}"+to+"\u{1f}"+edge.label
+                let count=(aggregates[key]?.3 ?? 0)+1;aggregates[key]=(from,to,edge.label,count)
+            }
+            allNodes=grouped.values.sorted {$0.id<$1.id}
+            allEdges=aggregates.values.map {Edge(from:$0.0,to:$0.1,label:$0.3>1 ? $0.2+" × \($0.3)":$0.2)}.sorted {($0.from,$0.to,$0.label)<($1.from,$1.to,$1.label)}
+            detail="Folder overview · \(fullNodes) indexed nodes / \(fullEdges) relationships · "+detail
         }
-        if !neighborhoodActive {
-            // Reserve room for the connected context (up to the projection's
-            // 24-area bound) before filling the remaining budget with files.
-            allNodes.filter { $0.contextID != nil }.prefix(24).forEach { if keep.count < limit { prioritize($0.id) } }
-            allNodes.filter { $0.fileID != nil }.forEach { if keep.count < limit { prioritize($0.id) } }
+        if relationships == nil,let selectedFileID {
+            allNodes.sort {a,b in a.id != b.id && (a.fileID==selectedFileID || (b.fileID != selectedFileID && a.id<b.id))}
         }
-        let chosenIDsInOrder = priority.prefix(limit)
-        let chosen = chosenIDsInOrder.compactMap { id in allNodes.first { $0.id == id } }
-        let chosenIDs = Set(chosen.map(\.id))
-        // Keep the edge payload bounded by the same caller supplied budget.
-        let chosenEdges = allEdges.filter { chosenIDs.contains($0.from) && chosenIDs.contains($0.to) }.prefix(limit)
-        let scan = "bounded scan of \(sources.keys.filter { index.files.indices.contains($0) }.count) readable sources · \(importCandidates) lexical import candidates · \(evidenceLinks) supplied evidence links"
-        return WorkspaceGraph(nodes: Array(chosen), edges: Array(chosenEdges), totalNodes: totalNodes, totalEdges: totalEdges, truncatedNodes: max(0, totalNodes - chosen.count), truncatedEdges: max(0, totalEdges - chosenEdges.count), scanSummary: scan)
+        let totalNodes=allNodes.count,totalEdges=allEdges.count
+        let size=max(1,limit), pages=max(1,(totalNodes+size-1)/size),currentPage=max(0,min(page,pages-1))
+        let chosen=Array(allNodes.dropFirst(currentPage*size).prefix(limit))
+        let chosenIDs=Set(chosen.map(\.id))
+        let edges=allEdges.filter {chosenIDs.contains($0.from) && chosenIDs.contains($0.to)}
+        let paging=pages>1 ? " · display page \(currentPage+1)/\(pages)":""
+        var result=WorkspaceGraph(nodes:chosen,edges:edges,totalNodes:totalNodes,totalEdges:totalEdges,truncatedNodes:max(0,totalNodes-chosen.count),truncatedEdges:max(0,totalEdges-edges.count),scanSummary:coverage+" · "+detail+paging)
+        result.pageCount=pages;result.page=currentPage
+        return result
     }
 
     public var mermaid: String {
@@ -131,12 +165,12 @@ public struct WorkspaceGraph: Sendable {
                 let path = node.id.dropFirst("file:".count)
                 let components = path.split(separator: "/")
                 key = components.dropLast().joined(separator: "/")
-            } else { key = "context" }
+            } else { key = node.folderPath == nil ? "context":"folders" }
             if !groupKeys.contains(key) { groupKeys.append(key) }
             aliasesByGroup[key, default: []].append("n\(index)")
         }
         for (groupIndex, key) in groupKeys.sorted().enumerated() {
-            let title = key == "context" ? "Context" : (key.isEmpty ? "Workspace root" : key)
+            let title = key == "context" ? "Context" : key == "folders" ? "Folders" : (key.isEmpty ? "Workspace root" : key)
             result.append("    subgraph group\(groupIndex)[\"\(Self.mermaidEscape(title))\"]")
             // A large folder should grow across the viewport rather than
             // becoming a single tall column that fit-to-window shrinks away.
@@ -151,7 +185,7 @@ public struct WorkspaceGraph: Sendable {
         let aliases = Dictionary(uniqueKeysWithValues: nodes.enumerated().map { ($0.element.id, "n\($0.offset)") })
         for edge in edges {
             if let from = aliases[edge.from], let to = aliases[edge.to] {
-                if edge.label == "import candidate" { result.append("    \(from) -.-> \(to)") }
+                if edge.label.hasPrefix("import candidate") { result.append("    \(from) -.-> \(to)") }
                 else { result.append("    \(from) -->|\(Self.mermaidEscape(edge.label))| \(to)") }
             }
         }

@@ -51,6 +51,13 @@ final class WorkspaceGraphView: NSView, WKNavigationDelegate {
     func focus(_ id: String) { guard let alias = nativeToAlias[id] else { return }; enqueue("window.Atlas.focus('" + Self.jsString(alias) + "');") }
     func clear() { generation += 1;validFileIDs.removeAll(); aliasToNative.removeAll(); nativeToAlias.removeAll(); pending.removeAll(); enqueue("window.Atlas.clear();"); status("No workspace graph loaded.") }
     func verifyRendering(_ completion: @escaping ([String: Any]) -> Void) { webView.evaluateJavaScript("window.Atlas.verify();") { value, _ in completion(value as? [String: Any] ?? [:]) } }
+    func verifySnapshot(_ completion:@escaping (Bool)->Void) {
+        webView.takeSnapshot(with:nil) {image,_ in
+            guard let image,let tiff=image.tiffRepresentation,let bitmap=NSBitmapImageRep(data:tiff),let data=bitmap.representation(using:.png,properties:[:]) else {completion(false);return}
+            try? data.write(to:URL(fileURLWithPath:"/tmp/code-atlas-generated-graph-render.png"))
+            completion(self.webView.bounds.width>100 && self.webView.bounds.height>100)
+        }
+    }
     func verifyZoomOpen() {enqueue("window.Atlas.verifyZoomOpen();")}
     func verifySelectFirstNode() { enqueue("window.Atlas.verifySelect();") }
     fileprivate func receive(_ message: WKScriptMessage) {

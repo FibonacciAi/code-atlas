@@ -39,7 +39,7 @@
     if(!element || canvas.classList.contains('loading'))return;
     post({type:'select',alias:element.dataset.atlasId,generation:currentGeneration});
   }
-  mermaid.initialize({startOnLoad:false,securityLevel:'strict',theme:'base',maxTextSize:100000,
+  mermaid.initialize({startOnLoad:false,securityLevel:'strict',theme:'base',maxTextSize:2000000,maxEdges:20000,
     flowchart:{htmlLabels:false,curve:'basis',nodeSpacing:22,rankSpacing:72,useMaxWidth:false},
     themeVariables:{primaryColor:'#162d39',primaryBorderColor:'#365563',primaryTextColor:'#e2f1f2',lineColor:'#658b99',secondaryColor:'#1e283e',tertiaryColor:'#131d29',fontFamily:'-apple-system, sans-serif',fontSize:'14px'}});
   let readerActive=false,openAfter=0;

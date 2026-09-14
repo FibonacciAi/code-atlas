@@ -33,7 +33,7 @@ final class WorkspaceGraphTests: XCTestCase {
         XCTAssertLessThanOrEqual(one.edges.count, one.totalEdgeCount)
         XCTAssertEqual(one.nodes, two.nodes)
         XCTAssertEqual(one.mermaid, two.mermaid)
-        XCTAssertTrue(one.summary.contains("omitted"))
+        XCTAssertTrue(one.summary.contains("outside this display page"))
     }
 
     func testSelectedFileIsIncludedWhenCallerFileListOmitsIt() {

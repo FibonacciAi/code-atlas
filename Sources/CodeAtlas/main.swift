@@ -39,6 +39,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
     let sizing=NSPopUpButton()
     let kindFilter=NSPopUpButton()
     let graphScope=NSPopUpButton()
+    let graphPrevious=NSButton(title:"Previous page",target:nil,action:nil)
+    let graphNext=NSButton(title:"Next page",target:nil,action:nil)
+    private var relationshipIndex:RelationshipIndex?
+    private var relationshipTask:Cancellation?
+    private var relationshipGeneration=UUID()
+    private var relationshipProgress=""
+    private var graphFolder:String?
+    private var graphPage=0
     let changesOnly=NSButton(checkboxWithTitle:"Changed files only",target:nil,action:nil)
     let gitSummary=NSTextField(wrappingLabelWithString:"Git changes · checking…")
     let linksPicker=NSPopUpButton()
@@ -229,9 +237,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
         left.addArrangedSubview(NSStackView(views:[backButton,colors]))
         changesOnly.target=self; changesOnly.action=#selector(changeFilter); sizing.addItems(withTitles:["Size · balanced","Size · lines of code","Size · bytes","Size · equal tiles"]); sizing.target=self; sizing.action=#selector(resizeMap)
         kindFilter.addItems(withTitles:["All content","Code & HTML","Photos","Video & audio","Documents"]); kindFilter.target=self; kindFilter.action=#selector(changeFilter)
-        graphScope.addItems(withTitles:["Graph · all files","Graph · selection + neighbors"])
+        graphScope.addItems(withTitles:["Graph · workspace","Graph · selection + neighbors"])
         graphScope.target=self;graphScope.action=#selector(changeGraphScope);graphScope.isHidden=true
         left.addArrangedSubview(graphScope);graphScope.widthAnchor.constraint(equalTo:left.widthAnchor).isActive=true
+        for button in [graphPrevious,graphNext] {button.target=self;button.isHidden=true;left.addArrangedSubview(button)}
+        graphPrevious.action=#selector(previousGraphPage);graphNext.action=#selector(nextGraphPage)
         left.addArrangedSubview(sizing); left.addArrangedSubview(kindFilter)
         sizing.widthAnchor.constraint(equalTo:left.widthAnchor).isActive=true; kindFilter.widthAnchor.constraint(equalTo:left.widthAnchor).isActive=true
         left.addArrangedSubview(changesOnly)
@@ -325,8 +335,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
             if let graphModel {graphView.select(selectedContextID.map {"context:"+$0} ?? selectedID.flatMap {id in index.map {"file:"+$0.files[id].path}});status.stringValue=graphModel.summary}
             else {scheduleGraph()}
         } else {if mode != lastSpatialMode {map.setCity(mode == 1);lastSpatialMode=mode};map.invalidate();window.makeFirstResponder(map)}
-        for control in [colors,sizing,folderPicker] {control.isEnabled=mode != 2}
-        backButton.isEnabled=mode != 2
+        for control in [colors,sizing] {control.isEnabled=mode != 2}
+        backButton.isEnabled=mode != 2 || graphFolder != nil
+        updateGraphPaging()
     }
     @objc func revealSelected() {
         guard let index, let selectedID, let url=try? RepoIndexer.validatedURL(root:index.root,path:index.files[selectedID].path) else {
@@ -344,8 +355,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
     @objc func fit() { if showingGraph {graphView.fit()} else {map.fit()} }
     @objc func focusSearch() {window.makeFirstResponder(search)}
     @objc func focusSelected() { if let selectedID,let index {if showingGraph {graphView.focus("file:"+index.files[selectedID].path)} else {map.focus(selectedID)}} }
-    @objc func goBack() { if showingGraph {graphView.fit()} else {map.goBack()} }
-    @objc func jumpFolder() { if folderPaths.indices.contains(folderPicker.indexOfSelectedItem) { map.focusFolder(folderPaths[folderPicker.indexOfSelectedItem]) } }
+    @objc func goBack() { if showingGraph {
+        if let folder=graphFolder {let parent=(folder as NSString).deletingLastPathComponent;setGraphFolder(parent)} else {graphView.fit()}
+    } else {map.goBack()} }
+    private func setGraphFolder(_ folder:String) {
+        graphFolder=folder.isEmpty ? nil : folder;graphPage=0;graphScope.selectItem(at:0)
+        if let n=folderPaths.firstIndex(of:folder) {folderPicker.selectItem(at:n)}
+        backButton.isEnabled=graphFolder != nil;scheduleGraph()
+    }
+    private func updateGraphPaging() {
+        let pages=graphModel?.pageCount ?? 1
+        graphPrevious.isHidden = !showingGraph || pages <= 1;graphNext.isHidden=graphPrevious.isHidden
+        graphPrevious.isEnabled=graphPage>0;graphNext.isEnabled=graphPage+1<pages
+    }
+    @objc func previousGraphPage() {graphPage=max(0,graphPage-1);scheduleGraph()}
+    @objc func nextGraphPage() {graphPage+=1;scheduleGraph()}
+    @objc func jumpFolder() { if folderPaths.indices.contains(folderPicker.indexOfSelectedItem) { if showingGraph {setGraphFolder(folderPaths[folderPicker.indexOfSelectedItem])} else {map.focusFolder(folderPaths[folderPicker.indexOfSelectedItem])} } }
     @objc func focusFolder() { if let index, let selectedID { map.focusFolder((index.files[selectedID].path as NSString).deletingLastPathComponent) } }
     @objc func toggleInspector() { inspectorPanel.isHidden.toggle(); mainSplit.adjustSubviews() }
     @objc func colorChanged() { map.colorMode=colors.indexOfSelectedItem }
@@ -453,7 +478,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
         }
         graphView.onSelect={ [weak self] nodeID in
             guard let self,let node=self.graphModel?.nodes.first(where:{$0.id==nodeID}) else {return}
-            if let id=node.fileID {self.select(id,fromMap:true)}
+            if let folder=node.folderPath {self.setGraphFolder(folder)}
+            else if let id=node.fileID {self.select(id,fromMap:true)}
             else if let id=node.contextID {self.selectContext(id)}
         }
         map.onGraphReaderClose={ [weak self] in self?.graphView.readerClosed() }
@@ -472,8 +498,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
         graphView.select("context:"+id)
     }
     @objc func changeGraphScope() {
+        graphPage=0
         if graphScope.indexOfSelectedItem==1,selectedID == nil,let first=matching.first {select(first,fromMap:true)}
         scheduleGraph()
+    }
+    private func startRelationshipScan(_ snapshot:RepositoryIndex) {
+        relationshipTask?.cancel();relationshipIndex=nil
+        let token=Cancellation(), request=UUID();relationshipTask=token;relationshipGeneration=request
+        relationshipProgress="Scanning relationships across the workspace…"
+        guard !demo else {relationshipProgress="Synthetic relationships";return}
+        DispatchQueue.global(qos:.utility).async { [weak self] in
+            let result=Result {try RelationshipIndex.scan(index:snapshot,cancelled:{token.cancelled},progress:{done,total in
+                DispatchQueue.main.async {
+                    guard let self,!token.cancelled,self.relationshipGeneration==request else {return}
+                    self.relationshipProgress="Scanning relationships · \(done)/\(total) eligible files"
+                    if self.showingGraph {self.status.stringValue=self.relationshipProgress}
+                }
+            })}
+            DispatchQueue.main.async {
+                guard let self,!token.cancelled,self.relationshipGeneration==request else {return}
+                switch result {
+                case .success(let relationships): self.relationshipIndex=relationships;self.relationshipProgress="";self.scheduleGraph()
+                case .failure: self.relationshipProgress="Relationship scan could not finish · Refresh to retry";if self.showingGraph {self.status.stringValue=self.relationshipProgress}
+                }
+            }
+        }
     }
     private func scheduleGraph() {
         graphWork?.cancel();graphCancellation?.cancel()
@@ -481,30 +530,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
         guard showingGraph else {graphModel=nil;return}
         guard let index else {graphModel=nil;graphView.clear();return}
         let ids=matching, projection=contextProjection, selected=selectedID, isDemo=demo, neighborhood=graphScope.indexOfSelectedItem==1
+        let relationships=relationshipIndex, folder=graphFolder, page=graphPage
         let token=Cancellation();graphCancellation=token
         let work=DispatchWorkItem { [weak self] in
             guard let self,!token.cancelled,self.graphRequest==request else {return}
-            self.status.stringValue="Building connections…"
+            self.status.stringValue=self.relationshipProgress.isEmpty ? "Arranging connections…" : self.relationshipProgress
             DispatchQueue.global(qos:.userInitiated).async { [weak self] in
-                var sources:[Int:String]=[:]
-                var candidates=ids
-                if let selected {candidates.removeAll {$0==selected};candidates.insert(selected,at:0)}
-                // Work scales with the visible graph, not the entire folder.
-                for id in candidates.prefix(80) {
-                    if token.cancelled {return}
-                    guard index.files.indices.contains(id) else {continue}
-                    let file=index.files[id]
-                    guard [.code,.html,.document].contains(file.kind) else {continue}
-                    if isDemo {sources[id]=Self.demoSource(file)}
-                    else if let text=try? GraphSourceReader.read(index:index,fileID:id) {sources[id]=text}
-                }
+                let sources:[Int:String]=isDemo ? Dictionary(uniqueKeysWithValues:index.files.indices.map {($0,Self.demoSource(index.files[$0]))}) : [:]
                 guard !token.cancelled else {return}
-                let model=WorkspaceGraph.build(index:index,fileIDs:ids,sources:sources,projection:projection,selectedFileID:selected,maxNodes:100,selectedNeighborhoodOnly:neighborhood)
+                let model=WorkspaceGraph.build(index:index,fileIDs:neighborhood ? Array(index.files.indices):ids,sources:sources,projection:projection,selectedFileID:selected,maxNodes:100,selectedNeighborhoodOnly:neighborhood,relationships:relationships,folder:folder,page:page)
                 DispatchQueue.main.async {
                     guard let self,!token.cancelled,self.graphRequest==request else {return}
-                    self.graphModel=model
+                    self.graphModel=model;self.graphPage=model.page;self.updateGraphPaging()
                     let chosen=self.selectedContextID.map {"context:"+$0} ?? self.selectedID.map {"file:"+index.files[$0].path}
-                    self.graphView.display(model,selectedID:chosen);self.status.stringValue=model.summary
+                    self.graphView.display(model,selectedID:chosen)
+                    self.status.stringValue=self.relationshipProgress.isEmpty ? model.summary : self.relationshipProgress
                 }
             }
         }
@@ -515,7 +555,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
         return IndexedSourceReference.fileID(source,in:index)
     }
     func windowWillClose(_ notification:Notification) {
-        connections.clear();graphWork?.cancel();graphCancellation?.cancel();graphView.clear();map.suspendInteraction()
+        connections.clear();relationshipTask?.cancel();graphWork?.cancel();graphCancellation?.cancel();graphView.clear();map.suspendInteraction()
     }
     @objc func revealProject() { if let index { NSWorkspace.shared.selectFile(nil,inFileViewerRootedAtPath:index.root.path) } }
     @objc func removeProject() {
@@ -553,6 +593,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
         if let verificationRoots,!verificationRoots.contains(where:{$0.standardizedFileURL==root.standardizedFileURL}) {return}
         if let reason=ProjectIdentity.rejection(root) { status.stringValue=reason; return }
         demo=false
+        relationshipTask?.cancel();relationshipIndex=nil;relationshipGeneration=UUID();graphFolder=nil;graphPage=0
         if index?.root.standardizedFileURL != root.standardizedFileURL {connections.clear();graphModel=nil;graphView.clear()}
         graphWork?.cancel();graphCancellation?.cancel()
         cancel?.cancel(); usageTask?.cancel()
@@ -628,6 +669,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
         linkIDs=[]; linksPicker.removeAllItems(); linksPicker.addItem(withTitle:"Imports · select a file"); linksPicker.isEnabled=false
         symbolField.isEnabled=true
         sourceStatus.stringValue="Read only · local source · outline uses lexical matching"
+        startRelationshipScan(value)
         map.load(value,layout:layout); filter()
         folderPaths=[""]+layout.folders.map(\.path).sorted(); folderPicker.removeAllItems(); folderPicker.addItem(withTitle:"Whole project"); folderPaths.dropFirst().forEach { folderPicker.addItem(withTitle:$0) }
         map.previewProvider=demo ? { file in Self.demoSource(file) } : nil
@@ -660,6 +702,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
     }
     func controlTextDidChange(_ obj: Notification) { filter() }
     func filter() {
+        graphPage=0
         guard let index else { return }
         let q=search.stringValue
         let category=kindFilter.indexOfSelectedItem
@@ -893,7 +936,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
             @MainActor func waitForGraph() async -> [String:Any] {
                 for _ in 0..<60 {
                     let state=await graphState()
-                    if (state["nodeCount"] as? Int ?? 0)>0 && state["loading"] as? Bool == false {return state}
+                    if relationshipIndex != nil && (state["nodeCount"] as? Int ?? 0)>0 && state["loading"] as? Bool == false {return state}
                     await pause(0.2)
                 }
                 return await graphState()
@@ -909,6 +952,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
             guard let current=index,current.files.count>1 else {NSApp.terminate(nil);return}
             select(1,fromMap:true);showGraph()
             let initial=await waitForGraph()
+            checks["all_eligible_sources_scanned"]=relationshipIndex?.isComplete == true && relationshipIndex?.scannedFiles == current.files.count
             checks["offline_mermaid_rendered"]=(initial["nodeCount"] as? Int ?? 0)>0
             graphView.verifySelectFirstNode();await pause(0.3)
             checks["graph_click_selects_file"]=selectedID==graphModel?.nodes.first?.fileID
@@ -922,6 +966,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
             showMap();restoreWorkspaceView();await pause(0.4)
             checks["saved_view_restores_mode"]=modePicker.selectedSegment==savedMode
             let selected=selectedID
+            let scanID=relationshipGeneration
+            search.stringValue="Fixture0";filter();await pause(0.35)
+            checks["filter_reuses_complete_relationship_index"]=relationshipGeneration==scanID && relationshipIndex?.scannedFiles==current.files.count
+            search.stringValue="";filter();await pause(0.35)
             showCity();await pause(0.35);showMap();await pause(0.35)
             checks["selection_shared_across_views"]=selectedID==selected && map.selected==selected
             openConnections();connections.search(question:"Studio projects")
@@ -937,6 +985,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTa
             window.makeKeyAndOrderFront(nil);window.makeFirstResponder(nil)
             await pause(0.6)
             checks["graph_view_visible"] = !graphView.isHiddenOrHasHiddenAncestor && graphView.visibleRect.width>100 && graphView.visibleRect.height>100
+            checks["graph_webview_snapshot"]=await withCheckedContinuation { continuation in graphView.verifySnapshot {continuation.resume(returning:$0)} }
             capture("unified-graph")
             if let sourceID=current.files.firstIndex(where:{$0.path=="Fixture0.swift"}) {
                 select(sourceID,fromMap:true);showMap();await pause(0.4)
